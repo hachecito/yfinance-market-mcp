@@ -17,8 +17,8 @@ pip install yfinance-market-mcp
 For local development (editable install):
 
 ```bash
-git clone https://github.com/YOUR_USER/yfinance-mcp.git
-cd yfinance-mcp
+git clone https://github.com/hachecito/yfinance-market-mcp.git
+cd yfinance-market-mcp
 pip install -e .
 ```
 
