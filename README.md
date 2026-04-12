@@ -1,8 +1,8 @@
-# yfinance-mcp
+# yfinance-market-mcp
 
 MCP server that exposes Yahoo Finance market data to AI assistants (Claude Code, Claude Desktop, or any MCP-compatible client).
 
-25 tools covering: price history, options chains, news, financials, analyst estimates, holders, and more.
+30 tools covering: price history, options chains, news, financials, analyst estimates, holders, screener, sector/industry data, and more.
 
 ---
 
@@ -12,6 +12,12 @@ MCP server that exposes Yahoo Finance market data to AI assistants (Claude Code,
 
 ```bash
 pip install yfinance-market-mcp
+```
+
+Or run directly without installing (requires [uv](https://docs.astral.sh/uv/)):
+
+```bash
+uvx yfinance-market-mcp
 ```
 
 For local development (editable install):
@@ -38,6 +44,7 @@ If the command is found, the server is ready.
 
 Create a `.mcp.json` file in your project root:
 
+Using pip:
 ```json
 {
   "mcpServers": {
@@ -48,17 +55,42 @@ Create a `.mcp.json` file in your project root:
 }
 ```
 
-Then restart Claude Code. The 25 tools will be available automatically — just ask Claude about any stock, options chain, or market news.
+Using uvx (no install needed):
+```json
+{
+  "mcpServers": {
+    "yfinance": {
+      "command": "uvx",
+      "args": ["yfinance-market-mcp"]
+    }
+  }
+}
+```
+
+Then restart Claude Code. The 30 tools will be available automatically — just ask Claude about any stock, options chain, or market news.
 
 ### With Claude Desktop
 
 Edit `%APPDATA%\Claude\claude_desktop_config.json` (Windows) or `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS):
 
+Using pip:
 ```json
 {
   "mcpServers": {
     "yfinance": {
       "command": "yfinance-mcp"
+    }
+  }
+}
+```
+
+Using uvx:
+```json
+{
+  "mcpServers": {
+    "yfinance": {
+      "command": "uvx",
+      "args": ["yfinance-market-mcp"]
     }
   }
 }
@@ -72,13 +104,15 @@ The server uses **stdio** transport. Launch it with:
 
 ```bash
 yfinance-mcp
+# or
+uvx yfinance-market-mcp
 ```
 
 Connect your MCP client to stdin/stdout of that process.
 
 ---
 
-## Available Tools (25)
+## Available Tools (30)
 
 ### Price
 | Tool | Description |
@@ -138,6 +172,22 @@ Connect your MCP client to stdin/stdout of that process.
 | `get_calendar` | Upcoming events (dividends, earnings) |
 | `search_tickers` | Search tickers by company name or keyword |
 
+### Sector & Industry
+| Tool | Description |
+|------|-------------|
+| `get_sector_data` | Sector overview, top companies, and industry breakdown |
+| `get_industry_data` | Industry overview, top companies, and top growth companies |
+
+### Screener
+| Tool | Description |
+|------|-------------|
+| `screen_stocks` | Predefined screeners (most actives, day gainers/losers, undervalued, etc.) |
+
+### Batch
+| Tool | Description |
+|------|-------------|
+| `batch_download` | Download OHLCV data for multiple tickers at once |
+
 ---
 
 ## Example Prompts
@@ -149,6 +199,8 @@ Once connected, just ask Claude naturally:
 - *"Compare MSFT and GOOGL fundamentals"*
 - *"Get analyst price targets for NVDA"*
 - *"Show me AMZN's quarterly income statement"*
+- *"What are the most active stocks today?"*
+- *"Show me the top companies in the semiconductor industry"*
 
 ---
 
@@ -160,7 +212,7 @@ Create a PyPI account at [pypi.org](https://pypi.org/account/register/) and gene
 
 1. Go to [pypi.org/manage/account](https://pypi.org/manage/account/)
 2. Scroll to **API tokens** > **Add API token**
-3. Name: `yfinance-mcp`, Scope: **Entire account** (first time) or project-scoped later
+3. Name: `yfinance-market-mcp`, Scope: **Entire account** (first time) or project-scoped later
 4. Copy the token (starts with `pypi-`)
 
 ### 2. Install Build Tools
@@ -171,36 +223,12 @@ pip install build twine
 
 ### 3. Build the Package
 
-From the `yfinance_mcp/` directory:
-
 ```bash
 cd yfinance_mcp
 python -m build
 ```
 
-This creates two files in `dist/`:
-- `yfinance_mcp-0.1.0.tar.gz` (source distribution)
-- `yfinance_mcp-0.1.0-py3-none-any.whl` (wheel)
-
-### 4. Test Upload (Optional but Recommended)
-
-Upload to TestPyPI first to verify everything works:
-
-```bash
-twine upload --repository testpypi dist/*
-```
-
-You'll be prompted for credentials:
-- Username: `__token__`
-- Password: your TestPyPI API token
-
-Test installing from TestPyPI:
-
-```bash
-pip install --index-url https://test.pypi.org/simple/ yfinance-mcp
-```
-
-### 5. Publish to PyPI
+### 4. Publish to PyPI
 
 ```bash
 twine upload dist/*
@@ -209,13 +237,6 @@ twine upload dist/*
 Credentials:
 - Username: `__token__`
 - Password: your PyPI API token (the `pypi-` one from step 1)
-
-### 6. Verify
-
-```bash
-pip install yfinance-market-mcp
-yfinance-mcp  # Should start the stdio server
-```
 
 ### Updating Versions
 
@@ -229,13 +250,13 @@ yfinance-mcp  # Should start the stdio server
 
 ```
 yfinance_mcp/
-├── pyproject.toml                  # Package metadata + entry point
+├── pyproject.toml                  # Package metadata + entry points
 ├── LICENSE
 ├── README.md
 ├── src/
 │   └── yfinance_mcp/
 │       ├── __init__.py             # Package version
-│       ├── server.py               # FastMCP server + 25 tools
+│       ├── server.py               # FastMCP server + 30 tools
 │       └── utils.py                # DataFrame/Series serialization
 └── tests/
     └── test_server.py              # Unit tests
