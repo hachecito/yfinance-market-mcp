@@ -1,5 +1,6 @@
 """FastMCP server exposing Yahoo Finance market data tools."""
 
+from datetime import datetime, timedelta
 from mcp.server.fastmcp import FastMCP
 import yfinance as yf
 
@@ -744,6 +745,407 @@ def screen_stocks(
         }
     except Exception as e:
         return {"error": str(e), "query": query}
+
+
+# ── Trade Advisor Tools ─────────────────────────────────────────────────────
+
+
+# FOMC Meeting Dates 2025-2026 (announcement days)
+_FOMC_DATES = [
+    # 2025
+    "2025-01-29", "2025-03-19", "2025-05-07", "2025-06-18",
+    "2025-07-30", "2025-09-17", "2025-11-05", "2025-12-17",
+    # 2026
+    "2026-01-28", "2026-03-18", "2026-04-29", "2026-06-17",
+    "2026-07-29", "2026-09-16", "2026-10-28", "2026-12-16",
+]
+_FOMC_PARSED = [datetime.strptime(d, "%Y-%m-%d").date() for d in _FOMC_DATES]
+
+
+@mcp.tool()
+def check_fed_earnings(ticker: str) -> dict:
+    """Check proximity to Fed meetings and earnings reports for safe trading.
+
+    Critical pre-trade check: Never open options positions on the day of or
+    day before a Fed meeting or earnings report.
+
+    Args:
+        ticker: Stock ticker symbol (e.g. "AAPL").
+
+    Returns:
+        dict with next Fed meeting, next earnings date, days until each,
+        safety assessment, and warnings.
+    """
+    today = datetime.now().date()
+    result = {"ticker": ticker, "date": today.isoformat()}
+
+    # --- Fed meeting ---
+    future_fomc = [d for d in _FOMC_PARSED if d >= today]
+    if future_fomc:
+        next_fomc = future_fomc[0]
+        days_to_fed = (next_fomc - today).days
+        result["next_fed_meeting"] = next_fomc.isoformat()
+        result["days_to_fed"] = days_to_fed
+        if days_to_fed == 0:
+            result["fed_status"] = "PELIGRO - Reunion Fed HOY"
+        elif days_to_fed == 1:
+            result["fed_status"] = "PELIGRO - Reunion Fed MANANA"
+        elif days_to_fed <= 3:
+            result["fed_status"] = "PRECAUCION"
+        else:
+            result["fed_status"] = "OK"
+    else:
+        result["next_fed_meeting"] = None
+        result["days_to_fed"] = None
+        result["fed_status"] = "Sin fechas FOMC programadas"
+
+    # --- Earnings ---
+    earnings_date = None
+    days_to_earnings = None
+    try:
+        t = yf.Ticker(ticker)
+        cal = t.calendar
+        if cal is not None:
+            if isinstance(cal, dict):
+                for key in ["Earnings Date", "earnings_date"]:
+                    if key in cal:
+                        val = cal[key]
+                        if isinstance(val, list) and len(val) > 0:
+                            ed = val[0]
+                        else:
+                            ed = val
+                        if hasattr(ed, "date"):
+                            earnings_date = ed.date()
+                        else:
+                            earnings_date = datetime.strptime(str(ed)[:10], "%Y-%m-%d").date()
+                        break
+            elif hasattr(cal, "index"):
+                for idx in cal.index:
+                    if "earning" in str(idx).lower():
+                        val = cal[idx]
+                        if isinstance(val, list):
+                            val = val[0]
+                        if hasattr(val, "date"):
+                            earnings_date = val.date()
+                        else:
+                            earnings_date = datetime.strptime(str(val)[:10], "%Y-%m-%d").date()
+                        break
+    except Exception:
+        pass
+
+    if earnings_date is None:
+        try:
+            t = yf.Ticker(ticker)
+            ed = t.earnings_dates
+            if ed is not None and len(ed) > 0:
+                future_dates = [
+                    d.date() if hasattr(d, "date") else d
+                    for d in ed.index
+                    if (d.date() if hasattr(d, "date") else d) >= today
+                ]
+                if future_dates:
+                    earnings_date = min(future_dates)
+        except Exception:
+            pass
+
+    if earnings_date:
+        days_to_earnings = (earnings_date - today).days
+        result["next_earnings"] = earnings_date.isoformat()
+        result["days_to_earnings"] = days_to_earnings
+        if days_to_earnings == 0:
+            result["earnings_status"] = "PELIGRO - Earnings HOY"
+        elif days_to_earnings == 1:
+            result["earnings_status"] = "PELIGRO - Earnings MANANA"
+        elif days_to_earnings <= 3:
+            result["earnings_status"] = "PRECAUCION - Prima inflada"
+        elif days_to_earnings <= 7:
+            result["earnings_status"] = "ATENCION - Verificar expiracion del contrato"
+        else:
+            result["earnings_status"] = "OK"
+    else:
+        result["next_earnings"] = None
+        result["days_to_earnings"] = None
+        result["earnings_status"] = "No se encontro fecha - verificar manualmente"
+
+    # --- Safety assessment ---
+    warnings = []
+    safe = True
+    days_fed = result.get("days_to_fed")
+    if days_fed is not None:
+        if days_fed <= 1:
+            warnings.append(f"CRITICO: Reunion Fed en {days_fed} dia(s) - NO operar")
+            safe = False
+        elif days_fed <= 3:
+            warnings.append(f"PRECAUCION: Reunion Fed en {days_fed} dias")
+    if days_to_earnings is not None:
+        if days_to_earnings <= 1:
+            warnings.append(f"CRITICO: Earnings en {days_to_earnings} dia(s) - NO operar este ticker")
+            safe = False
+        elif days_to_earnings <= 3:
+            warnings.append(f"PRECAUCION: Earnings en {days_to_earnings} dias - Prima inflada")
+        elif days_to_earnings <= 7:
+            warnings.append(f"NOTA: Earnings en {days_to_earnings} dias - Verificar expiracion")
+    if not warnings:
+        warnings.append("Sin eventos criticos proximos - Zona segura para operar")
+
+    result["safe_to_trade"] = safe
+    result["warnings"] = warnings
+    return result
+
+
+def _round_to_5(value):
+    """Round to nearest 5 (e.g., 18->20, 83->85, 42->40)."""
+    return max(5, round(value / 5) * 5)
+
+
+def _get_contract_day_range(contract_symbol):
+    """Fetch the Day's Range (High/Low) for an options contract."""
+    try:
+        ticker = yf.Ticker(contract_symbol)
+        hist = ticker.history(period="5d")
+        if hist.empty:
+            return None, None
+        last_day = hist.iloc[-1]
+        day_low = last_day["Low"]
+        day_high = last_day["High"]
+        if day_low > 0 and day_high > 0:
+            return float(day_low), float(day_high)
+        return None, None
+    except Exception:
+        return None, None
+
+
+@mcp.tool()
+def calculate_range(
+    ticker: str,
+    direction: str | None = None,
+    expiration: str | None = None,
+    strikes: int = 5,
+) -> dict:
+    """Calculate the RANGO (operating price range) for options contracts.
+
+    Uses the exact methodology from the options trading course:
+    1. Takes 5 strikes from nearest weekly expiration (4 OTM + 1 ITM, Ask > $0.15)
+    2. Gets Day's Range (High/Low) for each contract
+    3. Calculates: % = (Day High - Day Low) / Day Low * 100
+    4. Top 2 by % = the contracts that valorize the most
+    5. Their Ask prices (x100, rounded to 5) define the RANGO
+    6. Divides into 3 zones by day of week (Mon-Tue: low, Wed: mid, Thu-Fri: high)
+
+    Args:
+        ticker: Stock ticker symbol (e.g. "AAPL").
+        direction: "CALL", "PUT", or None for both.
+        expiration: Specific expiration date (YYYY-MM-DD). Auto-selects weekly if None.
+        strikes: Number of strikes to analyze (default 5).
+
+    Returns:
+        dict with price, expiration, and per-direction range analysis including
+        recommended contracts for today.
+    """
+    ticker = ticker.upper()
+    today = datetime.now()
+    n_strikes = strikes
+
+    try:
+        t = yf.Ticker(ticker)
+        price = t.fast_info.get("lastPrice", None) or t.fast_info.get("last_price", None)
+        if price is None:
+            hist = t.history(period="1d")
+            if not hist.empty:
+                price = float(hist["Close"].iloc[-1])
+        if not price:
+            return {"error": f"No se pudo obtener el precio de {ticker}"}
+    except Exception as e:
+        return {"error": f"Error obteniendo precio: {e}"}
+
+    # Select expiration
+    try:
+        expirations = list(t.options) if hasattr(t, "options") else []
+    except Exception:
+        expirations = []
+    if not expirations:
+        return {"error": "No hay expiraciones de opciones disponibles"}
+
+    target_exp = expiration
+    if not target_exp:
+        best_exp = None
+        best_score = 999
+        fallback_exp = None
+        for exp in expirations:
+            exp_date = datetime.strptime(exp, "%Y-%m-%d")
+            dte = (exp_date - today).days
+            if dte < 1:
+                continue
+            if 5 <= dte <= 7:
+                score = abs(dte - 6)
+                if score < best_score:
+                    best_score = score
+                    best_exp = exp
+            if fallback_exp is None and dte >= 3:
+                fallback_exp = exp
+        target_exp = best_exp or fallback_exp or expirations[0]
+
+    exp_date = datetime.strptime(target_exp, "%Y-%m-%d")
+    dte = (exp_date - today).days
+
+    try:
+        chain = t.option_chain(target_exp)
+    except Exception as e:
+        return {"error": f"Error al obtener cadena de opciones: {e}"}
+
+    directions = [direction.upper()] if direction else ["CALL", "PUT"]
+    results_summary = {}
+
+    for dir_ in directions:
+        df = chain.calls if dir_ == "CALL" else chain.puts
+
+        # Select strikes: primarily OTM, Ask > 0.15
+        filtered = df[df["ask"] > 0.15].copy()
+        if filtered.empty:
+            results_summary[dir_] = {"error": "No se encontraron contratos validos (Ask > $0.15)"}
+            continue
+
+        if dir_ == "CALL":
+            otm = filtered[filtered["strike"] > price].sort_values("strike")
+            itm = filtered[filtered["strike"] <= price].sort_values("strike", ascending=False)
+        else:
+            otm = filtered[filtered["strike"] < price].sort_values("strike", ascending=False)
+            itm = filtered[filtered["strike"] >= price].sort_values("strike")
+
+        selected = []
+        for _, row in otm.head(n_strikes - 1).iterrows():
+            selected.append(row)
+        remaining = n_strikes - len(selected)
+        if remaining > 0:
+            for _, row in itm.head(remaining).iterrows():
+                selected.append(row)
+
+        if not selected:
+            results_summary[dir_] = {"error": "No hay suficientes contratos"}
+            continue
+
+        # Get Day's Range for each selected strike
+        strike_data = []
+        for row in selected:
+            strike_val = float(row["strike"])
+            ask = float(row["ask"])
+            bid = float(row.get("bid", 0) or 0)
+            vol = int(row.get("volume", 0) or 0)
+            oi = int(row.get("openInterest", 0) or 0)
+            is_itm = bool(row.get("inTheMoney", False))
+            symbol = row.get("contractSymbol", "")
+
+            day_low, day_high = _get_contract_day_range(symbol)
+            pct = None
+            if day_low and day_high and day_low > 0:
+                pct = (day_high - day_low) / day_low * 100
+
+            strike_data.append({
+                "strike": strike_val,
+                "ask": ask,
+                "ask_x100": round(ask * 100),
+                "bid": bid,
+                "day_low_x100": round(day_low * 100) if day_low else None,
+                "day_high_x100": round(day_high * 100) if day_high else None,
+                "pct": round(pct, 1) if pct else None,
+                "volume": vol,
+                "open_interest": oi,
+                "itm": is_itm,
+                "symbol": symbol,
+            })
+
+        # Find top 2 by percentage
+        valid = [s for s in strike_data if s["pct"] is not None and s["pct"] > 0]
+        if len(valid) < 2:
+            results_summary[dir_] = {
+                "strikes_analyzed": strike_data,
+                "error": "No se pudo calcular rango (se necesitan al menos 2 contratos con Day's Range)",
+            }
+            continue
+
+        valid.sort(key=lambda x: x["pct"], reverse=True)
+        top_2 = valid[:2]
+        ask_prices = sorted([s["ask_x100"] for s in top_2])
+        range_low = _round_to_5(ask_prices[0])
+        range_high = _round_to_5(ask_prices[1])
+        if range_low >= range_high:
+            range_high = range_low + 5
+
+        # Day-of-week zone
+        weekday = today.weekday()
+        spread = range_high - range_low
+        third = spread / 3
+        day_names = {0: "Lunes", 1: "Martes", 2: "Miercoles", 3: "Jueves", 4: "Viernes", 5: "Sabado", 6: "Domingo"}
+
+        if weekday <= 1:
+            zone_name = "BAJA"
+            zone_low = range_low
+            zone_high = _round_to_5(range_low + third)
+        elif weekday == 2:
+            zone_name = "MEDIA"
+            zone_low = _round_to_5(range_low + third)
+            zone_high = _round_to_5(range_low + 2 * third)
+        else:
+            zone_name = "ALTA"
+            zone_low = _round_to_5(range_low + 2 * third)
+            zone_high = range_high
+
+        # Find ALL OTM contracts in the chain within the RANGO
+        all_otm = df.copy()
+        if dir_ == "CALL":
+            all_otm = all_otm[(all_otm["strike"] > price) & (all_otm["strike"] <= price * 1.15)]
+        else:
+            all_otm = all_otm[(all_otm["strike"] < price) & (all_otm["strike"] >= price * 0.85)]
+
+        contracts_in_range = []
+        for _, c in all_otm.iterrows():
+            c_ask = float(c.get("ask", 0) or 0)
+            c_bid = float(c.get("bid", 0) or 0)
+            if c_ask <= 0:
+                continue
+            c_ask_x100 = round(c_ask * 100)
+            spread_pct = ((c_ask - c_bid) / c_ask * 100) if c_ask > 0 else 100
+            in_range = range_low <= c_ask_x100 <= range_high
+            in_zone = zone_low <= c_ask_x100 <= zone_high
+
+            if in_range:
+                contracts_in_range.append({
+                    "strike": float(c["strike"]),
+                    "bid": round(c_bid, 2),
+                    "ask": round(c_ask, 2),
+                    "ask_x100": c_ask_x100,
+                    "spread_pct": round(spread_pct, 1),
+                    "volume": int(c.get("volume", 0) or 0),
+                    "open_interest": int(c.get("openInterest", 0) or 0),
+                    "in_zone_today": in_zone,
+                    "valid_spread": spread_pct <= 10,
+                })
+
+        # Find best contract for today
+        valid_today = [c for c in contracts_in_range if c["in_zone_today"] and c["valid_spread"]]
+        recommended = None
+        if valid_today:
+            recommended = max(valid_today, key=lambda x: x["volume"])
+
+        results_summary[dir_] = {
+            "range_low": range_low,
+            "range_high": range_high,
+            "top_2_strikes": [{"strike": s["strike"], "ask_x100": s["ask_x100"], "pct": s["pct"]} for s in top_2],
+            "day_of_week": day_names.get(weekday, "?"),
+            "zone": zone_name,
+            "zone_range": [zone_low, zone_high],
+            "strikes_analyzed": strike_data,
+            "contracts_in_range": contracts_in_range,
+            "recommended_contract": recommended,
+        }
+
+    return {
+        "ticker": ticker,
+        "price": round(price, 2),
+        "expiration": target_exp,
+        "days_to_expiry": dte,
+        "ranges": results_summary,
+    }
 
 
 # ── Batch Download ───────────────────────────────────────────────────────────
