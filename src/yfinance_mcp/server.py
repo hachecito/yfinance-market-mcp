@@ -925,17 +925,22 @@ def calculate_range(
     """Calculate the RANGO (operating price range) for options contracts.
 
     Uses the exact methodology from the options trading course:
-    1. Takes 5 strikes from nearest weekly expiration (4 OTM + 1 ITM, Ask > $0.15)
+    1. Takes 5 strikes from the nearest expiration (usually this Friday)
     2. Gets Day's Range (High/Low) for each contract
     3. Calculates: % = (Day High - Day Low) / Day Low * 100
     4. Top 2 by % = the contracts that valorize the most
     5. Their Ask prices (x100, rounded to 5) define the RANGO
     6. Divides into 3 zones by day of week (Mon-Tue: low, Wed: mid, Thu-Fri: high)
 
+    TIPS:
+    - Best days to calculate: Tuesday, Wednesday, Thursday
+    - Auto-selects the nearest expiration (closest Friday) for best results
+    - Monday has limited Day's Range data, Friday contracts expire same day
+
     Args:
         ticker: Stock ticker symbol (e.g. "AAPL").
         direction: "CALL", "PUT", or None for both.
-        expiration: Specific expiration date (YYYY-MM-DD). Auto-selects weekly if None.
+        expiration: Specific expiration date (YYYY-MM-DD). Auto-selects nearest if None.
         strikes: Number of strikes to analyze (default 5).
 
     Returns:
@@ -968,25 +973,29 @@ def calculate_range(
 
     target_exp = expiration
     if not target_exp:
-        best_exp = None
-        best_score = 999
-        fallback_exp = None
+        # Prefer the nearest expiration (usually this Friday)
+        nearest_exp = None
         for exp in expirations:
             exp_date = datetime.strptime(exp, "%Y-%m-%d")
             dte = (exp_date - today).days
-            if dte < 1:
-                continue
-            if 5 <= dte <= 7:
-                score = abs(dte - 6)
-                if score < best_score:
-                    best_score = score
-                    best_exp = exp
-            if fallback_exp is None and dte >= 3:
-                fallback_exp = exp
-        target_exp = best_exp or fallback_exp or expirations[0]
+            if dte >= 1:
+                nearest_exp = exp
+                break
+        target_exp = nearest_exp or expirations[0]
 
     exp_date = datetime.strptime(target_exp, "%Y-%m-%d")
     dte = (exp_date - today).days
+
+    # Tip: best days to calculate the range
+    weekday = today.weekday()
+    day_names = {0: "Lunes", 1: "Martes", 2: "Miercoles", 3: "Jueves", 4: "Viernes", 5: "Sabado", 6: "Domingo"}
+    tips = []
+    if weekday == 0:
+        tips.append("TIP: El lunes no es ideal para calcular el rango. Los mejores dias son martes, miercoles y jueves cuando hay mas datos de Day's Range disponibles.")
+    elif weekday == 4:
+        tips.append("TIP: El viernes no es ideal para calcular el rango ya que los contratos semanales expiran hoy. Mejor calcular martes a jueves.")
+    elif weekday >= 5:
+        tips.append("TIP: El mercado esta cerrado. Calcula el rango entre martes y jueves para mejores resultados.")
 
     try:
         chain = t.option_chain(target_exp)
@@ -1072,10 +1081,8 @@ def calculate_range(
             range_high = range_low + 5
 
         # Day-of-week zone
-        weekday = today.weekday()
         spread = range_high - range_low
         third = spread / 3
-        day_names = {0: "Lunes", 1: "Martes", 2: "Miercoles", 3: "Jueves", 4: "Viernes", 5: "Sabado", 6: "Domingo"}
 
         if weekday <= 1:
             zone_name = "BAJA"
@@ -1139,13 +1146,16 @@ def calculate_range(
             "recommended_contract": recommended,
         }
 
-    return {
+    result = {
         "ticker": ticker,
         "price": round(price, 2),
         "expiration": target_exp,
         "days_to_expiry": dte,
         "ranges": results_summary,
     }
+    if tips:
+        result["tips"] = tips
+    return result
 
 
 # ── Batch Download ───────────────────────────────────────────────────────────
