@@ -82,7 +82,14 @@ def get_dividends(ticker: str) -> dict:
     try:
         t = yf.Ticker(ticker)
         divs = t.dividends
-        return {"ticker": ticker, "data": df_to_records(divs.reset_index().rename(columns={0: "Dividend"}) if not divs.empty else divs)}
+        return {
+            "ticker": ticker,
+            "data": df_to_records(
+                divs.reset_index().rename(columns={0: "Dividend"})
+                if not divs.empty
+                else divs
+            ),
+        }
     except Exception as e:
         return {"error": str(e), "ticker": ticker}
 
@@ -100,7 +107,14 @@ def get_splits(ticker: str) -> dict:
     try:
         t = yf.Ticker(ticker)
         splits = t.splits
-        return {"ticker": ticker, "data": df_to_records(splits.reset_index().rename(columns={0: "Split"}) if not splits.empty else splits)}
+        return {
+            "ticker": ticker,
+            "data": df_to_records(
+                splits.reset_index().rename(columns={0: "Split"})
+                if not splits.empty
+                else splits
+            ),
+        }
     except Exception as e:
         return {"error": str(e), "ticker": ticker}
 
@@ -141,11 +155,26 @@ def get_fast_info(ticker: str) -> dict:
         fi = t.fast_info
         data = {}
         for attr in [
-            "currency", "day_high", "day_low", "exchange", "fifty_day_average",
-            "last_price", "last_volume", "market_cap", "open", "previous_close",
-            "quote_type", "regular_market_previous_close", "shares",
-            "ten_day_average_volume", "three_month_average_volume", "timezone",
-            "two_hundred_day_average", "year_change", "year_high", "year_low",
+            "currency",
+            "day_high",
+            "day_low",
+            "exchange",
+            "fifty_day_average",
+            "last_price",
+            "last_volume",
+            "market_cap",
+            "open",
+            "previous_close",
+            "quote_type",
+            "regular_market_previous_close",
+            "shares",
+            "ten_day_average_volume",
+            "three_month_average_volume",
+            "timezone",
+            "two_hundred_day_average",
+            "year_change",
+            "year_high",
+            "year_low",
         ]:
             try:
                 data[attr] = safe_value(getattr(fi, attr, None))
@@ -170,7 +199,18 @@ def get_ticker_summary(ticker: str) -> dict:
         t = yf.Ticker(ticker)
         fi = t.fast_info
         price_data = {}
-        for attr in ["last_price", "market_cap", "previous_close", "open", "day_high", "day_low", "year_high", "year_low", "fifty_day_average", "two_hundred_day_average"]:
+        for attr in [
+            "last_price",
+            "market_cap",
+            "previous_close",
+            "open",
+            "day_high",
+            "day_low",
+            "year_high",
+            "year_low",
+            "fifty_day_average",
+            "two_hundred_day_average",
+        ]:
             try:
                 price_data[attr] = safe_value(getattr(fi, attr, None))
             except Exception:
@@ -179,8 +219,18 @@ def get_ticker_summary(ticker: str) -> dict:
         info = t.info
         fundamentals = {
             k: safe_value(info.get(k))
-            for k in ["trailingPE", "forwardPE", "trailingEps", "forwardEps", "dividendYield",
-                       "beta", "sector", "industry", "fullTimeEmployees", "shortName"]
+            for k in [
+                "trailingPE",
+                "forwardPE",
+                "trailingEps",
+                "forwardEps",
+                "dividendYield",
+                "beta",
+                "sector",
+                "industry",
+                "fullTimeEmployees",
+                "shortName",
+            ]
             if info.get(k) is not None
         }
 
@@ -196,7 +246,13 @@ def get_ticker_summary(ticker: str) -> dict:
         try:
             targets = t.analyst_price_targets
             if targets is not None:
-                analyst = series_to_dict(targets) if hasattr(targets, "to_dict") else {k: safe_value(v) for k, v in targets.items()} if isinstance(targets, dict) else {}
+                analyst = (
+                    series_to_dict(targets)
+                    if hasattr(targets, "to_dict")
+                    else {k: safe_value(v) for k, v in targets.items()}
+                    if isinstance(targets, dict)
+                    else {}
+                )
         except Exception:
             pass
 
@@ -250,7 +306,7 @@ def search_news(query: str, count: int = 8) -> dict:
     try:
         search = yf.Search(query, news_count=count)
         articles = []
-        for article in (search.news or []):
+        for article in search.news or []:
             articles.append(_parse_news_article(article))
         return {"query": query, "count": len(articles), "articles": articles}
     except Exception as e:
@@ -336,7 +392,11 @@ def get_income_statement(ticker: str, freq: str = "yearly") -> dict:
             df = getattr(t, "trailing_income_stmt", t.income_stmt)
         else:
             df = t.income_stmt
-        return {"ticker": ticker, "freq": freq, "data": df_to_records(df.T if df is not None else df)}
+        return {
+            "ticker": ticker,
+            "freq": freq,
+            "data": df_to_records(df.T if df is not None else df),
+        }
     except Exception as e:
         return {"error": str(e), "ticker": ticker}
 
@@ -355,7 +415,11 @@ def get_balance_sheet(ticker: str, freq: str = "yearly") -> dict:
     try:
         t = yf.Ticker(ticker)
         df = t.quarterly_balance_sheet if freq == "quarterly" else t.balance_sheet
-        return {"ticker": ticker, "freq": freq, "data": df_to_records(df.T if df is not None else df)}
+        return {
+            "ticker": ticker,
+            "freq": freq,
+            "data": df_to_records(df.T if df is not None else df),
+        }
     except Exception as e:
         return {"error": str(e), "ticker": ticker}
 
@@ -374,7 +438,11 @@ def get_cash_flow(ticker: str, freq: str = "yearly") -> dict:
     try:
         t = yf.Ticker(ticker)
         df = t.quarterly_cashflow if freq == "quarterly" else t.cashflow
-        return {"ticker": ticker, "freq": freq, "data": df_to_records(df.T if df is not None else df)}
+        return {
+            "ticker": ticker,
+            "freq": freq,
+            "data": df_to_records(df.T if df is not None else df),
+        }
     except Exception as e:
         return {"error": str(e), "ticker": ticker}
 
@@ -398,7 +466,10 @@ def get_analyst_price_targets(ticker: str) -> dict:
         if targets is None:
             return {"ticker": ticker, "data": {}}
         if isinstance(targets, dict):
-            return {"ticker": ticker, "data": {k: safe_value(v) for k, v in targets.items()}}
+            return {
+                "ticker": ticker,
+                "data": {k: safe_value(v) for k, v in targets.items()},
+            }
         return {"ticker": ticker, "data": series_to_dict(targets)}
     except Exception as e:
         return {"error": str(e), "ticker": ticker}
@@ -607,7 +678,10 @@ def get_calendar(ticker: str) -> dict:
         if cal is None:
             return {"ticker": ticker, "data": {}}
         if isinstance(cal, dict):
-            return {"ticker": ticker, "data": {k: safe_value(v) for k, v in cal.items()}}
+            return {
+                "ticker": ticker,
+                "data": {k: safe_value(v) for k, v in cal.items()},
+            }
         return {"ticker": ticker, "data": series_to_dict(cal)}
     except Exception as e:
         return {"error": str(e), "ticker": ticker}
@@ -627,14 +701,16 @@ def search_tickers(query: str, max_results: int = 8) -> dict:
     try:
         search = yf.Search(query, max_results=max_results)
         quotes = []
-        for q in (search.quotes or []):
-            quotes.append({
-                "symbol": q.get("symbol", ""),
-                "shortname": q.get("shortname", ""),
-                "longname": q.get("longname", ""),
-                "exchange": q.get("exchange", ""),
-                "quoteType": q.get("quoteType", ""),
-            })
+        for q in search.quotes or []:
+            quotes.append(
+                {
+                    "symbol": q.get("symbol", ""),
+                    "shortname": q.get("shortname", ""),
+                    "longname": q.get("longname", ""),
+                    "exchange": q.get("exchange", ""),
+                    "quoteType": q.get("quoteType", ""),
+                }
+            )
         return {"query": query, "count": len(quotes), "results": quotes}
     except Exception as e:
         return {"error": str(e), "query": query}
@@ -723,18 +799,22 @@ def screen_stocks(
     try:
         result = yf.screen(query, count=count)
         quotes = []
-        for q in (result.get("quotes") or []):
-            quotes.append({
-                "symbol": q.get("symbol", ""),
-                "shortName": q.get("shortName", ""),
-                "regularMarketPrice": safe_value(q.get("regularMarketPrice")),
-                "regularMarketChange": safe_value(q.get("regularMarketChange")),
-                "regularMarketChangePercent": safe_value(q.get("regularMarketChangePercent")),
-                "regularMarketVolume": safe_value(q.get("regularMarketVolume")),
-                "marketCap": safe_value(q.get("marketCap")),
-                "trailingPE": safe_value(q.get("trailingPE")),
-                "exchange": q.get("exchange", ""),
-            })
+        for q in result.get("quotes") or []:
+            quotes.append(
+                {
+                    "symbol": q.get("symbol", ""),
+                    "shortName": q.get("shortName", ""),
+                    "regularMarketPrice": safe_value(q.get("regularMarketPrice")),
+                    "regularMarketChange": safe_value(q.get("regularMarketChange")),
+                    "regularMarketChangePercent": safe_value(
+                        q.get("regularMarketChangePercent")
+                    ),
+                    "regularMarketVolume": safe_value(q.get("regularMarketVolume")),
+                    "marketCap": safe_value(q.get("marketCap")),
+                    "trailingPE": safe_value(q.get("trailingPE")),
+                    "exchange": q.get("exchange", ""),
+                }
+            )
         return {
             "query": query,
             "title": result.get("title", ""),
@@ -753,11 +833,23 @@ def screen_stocks(
 # FOMC Meeting Dates 2025-2026 (announcement days)
 _FOMC_DATES = [
     # 2025
-    "2025-01-29", "2025-03-19", "2025-05-07", "2025-06-18",
-    "2025-07-30", "2025-09-17", "2025-11-05", "2025-12-17",
+    "2025-01-29",
+    "2025-03-19",
+    "2025-05-07",
+    "2025-06-18",
+    "2025-07-30",
+    "2025-09-17",
+    "2025-11-05",
+    "2025-12-17",
     # 2026
-    "2026-01-28", "2026-03-18", "2026-04-29", "2026-06-17",
-    "2026-07-29", "2026-09-16", "2026-10-28", "2026-12-16",
+    "2026-01-28",
+    "2026-03-18",
+    "2026-04-29",
+    "2026-06-17",
+    "2026-07-29",
+    "2026-09-16",
+    "2026-10-28",
+    "2026-12-16",
 ]
 _FOMC_PARSED = [datetime.strptime(d, "%Y-%m-%d").date() for d in _FOMC_DATES]
 
@@ -817,7 +909,9 @@ def check_fed_earnings(ticker: str) -> dict:
                         if hasattr(ed, "date"):
                             earnings_date = ed.date()
                         else:
-                            earnings_date = datetime.strptime(str(ed)[:10], "%Y-%m-%d").date()
+                            earnings_date = datetime.strptime(
+                                str(ed)[:10], "%Y-%m-%d"
+                            ).date()
                         break
             elif hasattr(cal, "index"):
                 for idx in cal.index:
@@ -828,7 +922,9 @@ def check_fed_earnings(ticker: str) -> dict:
                         if hasattr(val, "date"):
                             earnings_date = val.date()
                         else:
-                            earnings_date = datetime.strptime(str(val)[:10], "%Y-%m-%d").date()
+                            earnings_date = datetime.strptime(
+                                str(val)[:10], "%Y-%m-%d"
+                            ).date()
                         break
     except Exception:
         pass
@@ -879,12 +975,18 @@ def check_fed_earnings(ticker: str) -> dict:
             warnings.append(f"PRECAUCION: Reunion Fed en {days_fed} dias")
     if days_to_earnings is not None:
         if days_to_earnings <= 1:
-            warnings.append(f"CRITICO: Earnings en {days_to_earnings} dia(s) - NO operar este ticker")
+            warnings.append(
+                f"CRITICO: Earnings en {days_to_earnings} dia(s) - NO operar este ticker"
+            )
             safe = False
         elif days_to_earnings <= 3:
-            warnings.append(f"PRECAUCION: Earnings en {days_to_earnings} dias - Prima inflada")
+            warnings.append(
+                f"PRECAUCION: Earnings en {days_to_earnings} dias - Prima inflada"
+            )
         elif days_to_earnings <= 7:
-            warnings.append(f"NOTA: Earnings en {days_to_earnings} dias - Verificar expiracion")
+            warnings.append(
+                f"NOTA: Earnings en {days_to_earnings} dias - Verificar expiracion"
+            )
     if not warnings:
         warnings.append("Sin eventos criticos proximos - Zona segura para operar")
 
@@ -902,13 +1004,16 @@ def _get_contract_day_range(contract_symbol):
     """Fetch the Day's Range (High/Low) for an options contract."""
     try:
         ticker = yf.Ticker(contract_symbol)
-        hist = ticker.history(period="5d")
-        if hist.empty:
-            return None, None
-        last_day = hist.iloc[-1]
-        day_low = last_day["Low"]
-        day_high = last_day["High"]
-        if day_low > 0 and day_high > 0:
+        info = ticker.info
+        # Try regularMarket fields first, then fall back to standard fields
+        day_low = info.get("regularMarketDayLow") or info.get("dayLow")
+        day_high = info.get("regularMarketDayHigh") or info.get("dayHigh")
+        if (
+            day_low is not None
+            and day_high is not None
+            and day_low > 0
+            and day_high > 0
+        ):
             return float(day_low), float(day_high)
         return None, None
     except Exception:
@@ -953,7 +1058,9 @@ def calculate_range(
 
     try:
         t = yf.Ticker(ticker)
-        price = t.fast_info.get("lastPrice", None) or t.fast_info.get("last_price", None)
+        price = t.fast_info.get("lastPrice", None) or t.fast_info.get(
+            "last_price", None
+        )
         if price is None:
             hist = t.history(period="1d")
             if not hist.empty:
@@ -988,14 +1095,28 @@ def calculate_range(
 
     # Tip: best days to calculate the range
     weekday = today.weekday()
-    day_names = {0: "Lunes", 1: "Martes", 2: "Miercoles", 3: "Jueves", 4: "Viernes", 5: "Sabado", 6: "Domingo"}
+    day_names = {
+        0: "Lunes",
+        1: "Martes",
+        2: "Miercoles",
+        3: "Jueves",
+        4: "Viernes",
+        5: "Sabado",
+        6: "Domingo",
+    }
     tips = []
     if weekday == 0:
-        tips.append("TIP: El lunes no es ideal para calcular el rango. Los mejores dias son martes, miercoles y jueves cuando hay mas datos de Day's Range disponibles.")
+        tips.append(
+            "TIP: El lunes no es ideal para calcular el rango. Los mejores dias son martes, miercoles y jueves cuando hay mas datos de Day's Range disponibles."
+        )
     elif weekday == 4:
-        tips.append("TIP: El viernes no es ideal para calcular el rango ya que los contratos semanales expiran hoy. Mejor calcular martes a jueves.")
+        tips.append(
+            "TIP: El viernes no es ideal para calcular el rango ya que los contratos semanales expiran hoy. Mejor calcular martes a jueves."
+        )
     elif weekday >= 5:
-        tips.append("TIP: El mercado esta cerrado. Calcula el rango entre martes y jueves para mejores resultados.")
+        tips.append(
+            "TIP: El mercado esta cerrado. Calcula el rango entre martes y jueves para mejores resultados."
+        )
 
     try:
         chain = t.option_chain(target_exp)
@@ -1011,14 +1132,20 @@ def calculate_range(
         # Select strikes: primarily OTM, Ask > 0.15
         filtered = df[df["ask"] > 0.15].copy()
         if filtered.empty:
-            results_summary[dir_] = {"error": "No se encontraron contratos validos (Ask > $0.15)"}
+            results_summary[dir_] = {
+                "error": "No se encontraron contratos validos (Ask > $0.15)"
+            }
             continue
 
         if dir_ == "CALL":
             otm = filtered[filtered["strike"] > price].sort_values("strike")
-            itm = filtered[filtered["strike"] <= price].sort_values("strike", ascending=False)
+            itm = filtered[filtered["strike"] <= price].sort_values(
+                "strike", ascending=False
+            )
         else:
-            otm = filtered[filtered["strike"] < price].sort_values("strike", ascending=False)
+            otm = filtered[filtered["strike"] < price].sort_values(
+                "strike", ascending=False
+            )
             itm = filtered[filtered["strike"] >= price].sort_values("strike")
 
         selected = []
@@ -1049,19 +1176,21 @@ def calculate_range(
             if day_low and day_high and day_low > 0:
                 pct = (day_high - day_low) / day_low * 100
 
-            strike_data.append({
-                "strike": strike_val,
-                "ask": ask,
-                "ask_x100": round(ask * 100),
-                "bid": bid,
-                "day_low_x100": round(day_low * 100) if day_low else None,
-                "day_high_x100": round(day_high * 100) if day_high else None,
-                "pct": round(pct, 1) if pct else None,
-                "volume": vol,
-                "open_interest": oi,
-                "itm": is_itm,
-                "symbol": symbol,
-            })
+            strike_data.append(
+                {
+                    "strike": strike_val,
+                    "ask": ask,
+                    "ask_x100": round(ask * 100),
+                    "bid": bid,
+                    "day_low_x100": round(day_low * 100) if day_low else None,
+                    "day_high_x100": round(day_high * 100) if day_high else None,
+                    "pct": round(pct, 1) if pct else None,
+                    "volume": vol,
+                    "open_interest": oi,
+                    "itm": is_itm,
+                    "symbol": symbol,
+                }
+            )
 
         # Find top 2 by percentage
         valid = [s for s in strike_data if s["pct"] is not None and s["pct"] > 0]
@@ -1100,9 +1229,13 @@ def calculate_range(
         # Find ALL OTM contracts in the chain within the RANGO
         all_otm = df.copy()
         if dir_ == "CALL":
-            all_otm = all_otm[(all_otm["strike"] > price) & (all_otm["strike"] <= price * 1.15)]
+            all_otm = all_otm[
+                (all_otm["strike"] > price) & (all_otm["strike"] <= price * 1.15)
+            ]
         else:
-            all_otm = all_otm[(all_otm["strike"] < price) & (all_otm["strike"] >= price * 0.85)]
+            all_otm = all_otm[
+                (all_otm["strike"] < price) & (all_otm["strike"] >= price * 0.85)
+            ]
 
         contracts_in_range = []
         for _, c in all_otm.iterrows():
@@ -1116,20 +1249,24 @@ def calculate_range(
             in_zone = zone_low <= c_ask_x100 <= zone_high
 
             if in_range:
-                contracts_in_range.append({
-                    "strike": float(c["strike"]),
-                    "bid": round(c_bid, 2),
-                    "ask": round(c_ask, 2),
-                    "ask_x100": c_ask_x100,
-                    "spread_pct": round(spread_pct, 1),
-                    "volume": int(c.get("volume", 0) or 0),
-                    "open_interest": int(c.get("openInterest", 0) or 0),
-                    "in_zone_today": in_zone,
-                    "valid_spread": spread_pct <= 10,
-                })
+                contracts_in_range.append(
+                    {
+                        "strike": float(c["strike"]),
+                        "bid": round(c_bid, 2),
+                        "ask": round(c_ask, 2),
+                        "ask_x100": c_ask_x100,
+                        "spread_pct": round(spread_pct, 1),
+                        "volume": int(c.get("volume", 0) or 0),
+                        "open_interest": int(c.get("openInterest", 0) or 0),
+                        "in_zone_today": in_zone,
+                        "valid_spread": spread_pct <= 10,
+                    }
+                )
 
         # Find best contract for today
-        valid_today = [c for c in contracts_in_range if c["in_zone_today"] and c["valid_spread"]]
+        valid_today = [
+            c for c in contracts_in_range if c["in_zone_today"] and c["valid_spread"]
+        ]
         recommended = None
         if valid_today:
             recommended = max(valid_today, key=lambda x: x["volume"])
@@ -1137,7 +1274,10 @@ def calculate_range(
         results_summary[dir_] = {
             "range_low": range_low,
             "range_high": range_high,
-            "top_2_strikes": [{"strike": s["strike"], "ask_x100": s["ask_x100"], "pct": s["pct"]} for s in top_2],
+            "top_2_strikes": [
+                {"strike": s["strike"], "ask_x100": s["ask_x100"], "pct": s["pct"]}
+                for s in top_2
+            ],
             "day_of_week": day_names.get(weekday, "?"),
             "zone": zone_name,
             "zone_range": [zone_low, zone_high],
