@@ -1149,7 +1149,7 @@ def calculate_range(
             itm = filtered[filtered["strike"] >= price].sort_values("strike")
 
         selected = []
-        for _, row in otm.head(n_strikes - 1).iterrows():
+        for _, row in otm.head(n_strikes).iterrows():
             selected.append(row)
         remaining = n_strikes - len(selected)
         if remaining > 0:
